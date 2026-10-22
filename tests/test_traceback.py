@@ -397,3 +397,27 @@ def test_recursive_exception() -> None:
             console.print_exception(show_locals=True)
 
     bar()
+
+
+def test_cyclic_exception_chain_terminates() -> None:
+    """Traceback.extract must not loop forever when __cause__ and __context__
+    form a cycle (regression test for https://github.com/Textualize/rich/issues/4238)."""
+    import io
+
+    error = ValueError("inner")
+    try:
+        try:
+            try:
+                raise error
+            except ValueError as exc:
+                raise RuntimeError("outer") from exc
+        except RuntimeError:
+            raise error  # error.__context__ is RuntimeError, whose __cause__ is error
+    except ValueError:
+        buf = io.StringIO()
+        Console(file=buf).print_exception()
+        output = buf.getvalue()
+
+    # Both exception messages should appear in the output exactly once.
+    assert output.count("ValueError: inner") == 1
+    assert output.count("RuntimeError: outer") == 1

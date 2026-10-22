@@ -464,6 +464,9 @@ class Traceback:
 
         stacks: List[Stack] = []
         is_cause = False
+        # Track every exception visited in the chain so we stop when a cycle
+        # is detected (e.g. A.__context__ is B and B.__cause__ is A).
+        chain_seen: Set[BaseException] = set()
 
         from rich import _IMPORT_CWD
 
@@ -596,9 +599,10 @@ class Traceback:
                 if frame_summary.f_locals.get("_rich_traceback_guard", False):
                     del stack.frames[:]
 
+            chain_seen.add(exc_value)
             if not grouped_exceptions:
                 cause = getattr(exc_value, "__cause__", None)
-                if cause is not None and cause is not exc_value:
+                if cause is not None and cause not in chain_seen:
                     exc_type = cause.__class__
                     exc_value = cause
                     # __traceback__ can be None, e.g. for exceptions raised by the
@@ -608,7 +612,7 @@ class Traceback:
                     continue
 
                 cause = exc_value.__context__
-                if cause is not None and not getattr(
+                if cause is not None and cause not in chain_seen and not getattr(
                     exc_value, "__suppress_context__", False
                 ):
                     exc_type = cause.__class__
